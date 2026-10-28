@@ -2,7 +2,7 @@
 
 ## 0.3.2 — 2026-10-28
 
-Initial public source snapshot.
+Initial public source snapshot, published as **MacDisplaySwitch for macOS**. The app bundle, executables and preference domain retain the original DisplayFocus name for compatibility.
 
 - Persist physically verified external/display-mode/OS-driver profiles across logins.
 - Add startup delay, stable-configuration gate and bounded automatic actions.

@@ -1,8 +1,10 @@
-# DisplayFocus
+# MacDisplaySwitch for macOS
 
 **Experimental macOS menu bar display utility · 实验性 macOS 外屏切换工具**
 
 Connect a previously verified external monitor to use it as the only active display. Disconnect it to attempt to restore the built-in panel. Keep the monitor's existing resolution and refresh rate. A separate recovery process watches the transition and subsequent external-display loss.
+
+The open-source project is named **MacDisplaySwitch**. The executable, app bundle and preference domain retain the original **DisplayFocus** name for compatibility with existing installations.
 
 Version **0.3.2** is a source release, developed and tested on one Intel/OpenCore laptop. It uses private SkyLight APIs, is not notarized, and is **not a general guarantee of compatibility or recovery**. A hung driver or WindowServer can prevent recovery. Logical disable does not guarantee that the panel backlight powers off.
 
@@ -31,8 +33,8 @@ Version **0.3.2** is a source release, developed and tested on one Intel/OpenCor
 ## Build
 
 ```bash
-git clone https://github.com/sherves/DisplayFocus.git
-cd DisplayFocus
+git clone https://github.com/sherves/MacDisplaySwitch.git
+cd MacDisplaySwitch
 bash scripts/check.sh
 bash scripts/build.sh
 ```
@@ -91,7 +93,7 @@ Diagnostic output can contain display identities. Review it before sharing. This
 
 ## 中文说明
 
-DisplayFocus 是独立开发的菜单栏工具。核心用途是：**接上已确认的外屏后自动逻辑停用内屏，拔掉外屏时尝试恢复内屏**，不自动降低刷新率，不用镜像替代关闭。
+MacDisplaySwitch（Mac 屏幕切换）是独立开发的 macOS 菜单栏工具。现有应用包、命令行和偏好域沿用 DisplayFocus 名称，避免影响已安装用户的设置。核心用途是：**接上已确认的外屏后自动逻辑停用内屏，拔掉外屏时尝试恢复内屏**，不自动降低刷新率，不用镜像替代关闭。
 
 首次必须看着实体外屏做一次 25 秒保护测试并确认，之后才开启自动模式；登录时启动需要单独开启。登录后先等待 8 秒，显示配置连续稳定 4 秒后才执行。不同屏幕、模式或系统/驱动环境需要重新确认。内屏恢复按保存的 UUID 重新枚举当前 ID，最多等待 20 秒；失败暂停自动操作，不循环强行重试。
 

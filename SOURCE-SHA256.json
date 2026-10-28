@@ -1,11 +1,11 @@
 {
   ".gitignore": "1b56028a8e66761aaa529107a0f6bd3d7914d46fdc8f24cee96836d46731b2b7",
-  "CHANGELOG.md": "90e5a0c35b3a8903c590b16764ef1dbca25d6f797046e158c62c71b3754c6ca1",
+  "CHANGELOG.md": "f530755ebb73e1e4ec242316cd25bc05bc93c8e18d85b1e2e98271659c7008d1",
   "CONTRIBUTING.md": "ca35f796bcdbd1329bb579f9150dc8339bb0134e3602fc4313d8a36126312d04",
   "DESIGN.md": "744cfef064e3fe90b7b51aae2a116bc50ae447c78344ccea9b02d25aff06ed6f",
   "LICENSE": "3d51a6447aa56238f48f45df7d89f5818e6c558bf14393dd1bd7c6c410636027",
   "Package.swift": "42c6a2979c290723ebb8e7ad85c371973b4e153ce23894f42c7f8799d77bda4b",
-  "README.md": "db8fb457621a01acb5debdec130f2b1dae32729d0f00260adb5be2a25667436b",
+  "README.md": "0c3513a1716793a403d47d2e59c84b3d1a7f07defa65e51bcd6f0f6d7641be91",
   "Sources/DisplayCore/AutoController.swift": "1ca70f62c343529427c065f180044cf832cdb44d9937d21de3a9638667b3f4e9",
   "Sources/DisplayCore/AutomaticDisplayPolicy.swift": "2d29d57d7852d4ac40423c50e024d66e1c6691a2c12d648652048f5383003d09",
   "Sources/DisplayCore/DisplayCore.swift": "746bfafe184d69ef6893d4d8ee88d5b2aba90dc02dd350bc3fed6c8c45f07114",
