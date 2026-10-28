@@ -1,0 +1,16 @@
+# Build products and local state
+.build/
+build/
+.swiftpm/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.env
+.env.*
+*.pem
+*.p12
+*.key
+# Never publish local recovery tickets, profiles or raw diagnostics.
+Recovery/
+private/
+work/
