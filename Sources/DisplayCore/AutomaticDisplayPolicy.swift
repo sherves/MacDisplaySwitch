@@ -1,16 +1,4 @@
 import Foundation
-import CryptoKit
-
-/// Physical confirmation is tied to this panel, external mode and driver environment, not transient IDs.
-struct AutomaticDisplayProfile: Codable {
-    let builtin: String
-    let external: DisplayRecord
-    let environment: String
-    func allows(_ records: [DisplayRecord], environment current: String) -> Bool {
-        guard environment == current, let targets = try? DisplaySafety.targets(records) else { return false }
-        return targets.0.identity == builtin && targets.1.identity == external.identity && targets.1.sameMode(as: external)
-    }
-}
 
 struct DisplayStabilityGate {
     private var signature: String?
@@ -22,40 +10,41 @@ struct DisplayStabilityGate {
     }
 }
 
-public enum AutomaticDisplayPolicy {
-    private static let key = "DisplayFocus.automaticProfile.v1"
-    // A new login/helper after a driver or OS update requires new physical confirmation.
-    static let environment: String = {
-        let paths = ["/System/Library/CoreServices/SystemVersion.plist", "/Library/NullMoth/driver-version",
-            "/Library/Extensions/NVRM.kext/Contents/MacOS/NVRM", "/Library/Extensions/NVAccel.kext/Contents/MacOS/NVAccel",
-            "/Library/Extensions/NVRMFB.kext/Contents/MacOS/NVRMFB", "/Library/Extensions/NVRMAGDC.kext/Contents/MacOS/NVRMAGDC",
-            "/Library/GPUBundles/NVMTLDriver.bundle/Contents/MacOS/NVMTLDriver"]
-        var hash = SHA256()
-        for path in paths {
-            hash.update(data: Data(path.utf8))
-            hash.update(data: (try? Data(contentsOf: URL(fileURLWithPath: path))) ?? Data("missing".utf8))
-        }
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
-    }()
-    static func remember(builtin: String, external: DisplayRecord) throws {
-        let profile = AutomaticDisplayProfile(builtin: builtin, external: external, environment: environment)
-        Store.defaults.set(try JSONEncoder().encode(profile), forKey: key)
+struct AutomaticRetryState: Codable {
+    let boot: String
+    let until: TimeInterval
+    let reason: String
+    func ready(boot currentBoot: String, uptime: TimeInterval) -> Bool {
+        boot != currentBoot || uptime >= until
     }
+}
+
+/// Automatic use depends on live displays, never a driver hash or a saved confirmation.
+public enum AutomaticDisplayPolicy {
+    private static let retryKey = "DisplayFocus.automaticRetry.v2"
     static func allows(_ records: [DisplayRecord]) -> Bool {
-        guard let data = Store.defaults.data(forKey: key),
-              let profile = try? JSONDecoder().decode(AutomaticDisplayProfile.self, from: data) else { return false }
-        return profile.allows(records, environment: environment)
+        (try? DisplaySafety.targets(records)) != nil
     }
     public static var status: String {
-        guard let data = Store.defaults.data(forKey: key),
-              let p = try? JSONDecoder().decode(AutomaticDisplayProfile.self, from: data) else {
-            return "尚无确认记录；请先测试关闭内屏并确认一次"
-        }
-        guard p.environment == environment else { return "系统或驱动已变化；需重新测试并确认一次" }
-        return "已记住确认过的外屏：\(p.external.width)×\(p.external.height) @ \(ModeInfo.hzText(p.external.hz))"
+        Store.autoEnabled ? "持续自动仅外屏；登录后自动执行，驱动更新无需确认" : "本次临时恢复内屏；重新启动应用或登录后自动仅外屏"
     }
+    static var retry: AutomaticRetryState? {
+        guard let data = Store.defaults.data(forKey: retryKey) else { return nil }
+        return try? JSONDecoder().decode(AutomaticRetryState.self, from: data)
+    }
+    static var retryAllowed: Bool {
+        retry?.ready(boot: DisplayTrial.bootIdentity, uptime: ProcessInfo.processInfo.systemUptime) ?? true
+    }
+    public static func resume() {
+        Store.autoEnabled = true
+        for key in [retryKey, "DisplayFocus.autoPauseReason", "DisplayFocus.automaticProfile.v1"] {
+            Store.defaults.removeObject(forKey: key)
+        }
+    }
+    /// Brief backoff for a failed transaction. The user's automatic preference stays enabled.
     static func pause(_ reason: String) {
-        Store.autoEnabled = false
-        Store.defaults.set(reason, forKey: "DisplayFocus.autoPauseReason")
+        let state = AutomaticRetryState(boot: DisplayTrial.bootIdentity,
+            until: ProcessInfo.processInfo.systemUptime + 60, reason: reason)
+        if let data = try? JSONEncoder().encode(state) { Store.defaults.set(data, forKey: retryKey) }
     }
 }

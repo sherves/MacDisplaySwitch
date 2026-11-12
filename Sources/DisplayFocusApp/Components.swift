@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// 视觉主题：圆润卡片 + 橙色强调（改这里即可换色，例如 Color.accentColor 跟随系统）
+/// 视觉主题：自适应明暗卡片 + 蓝紫强调（改这里即可换色，例如 Color.accentColor 跟随系统）
 enum Theme {
-    static let accent = Color.orange
-    static let cardRadius: CGFloat = 14
-    static let cardFill = Color.primary.opacity(0.05)
-    static let cardStroke = Color.primary.opacity(0.08)
-    static let subtleFill = Color.primary.opacity(0.07)
+    static let accent = Color(red: 0.38, green: 0.43, blue: 0.94)
+    static let aqua = Color(red: 0.24, green: 0.78, blue: 0.76)
+    static let cardRadius: CGFloat = 16
+    static let cardFill = Color(nsColor: .controlBackgroundColor).opacity(0.72)
+    static let cardStroke = Color.primary.opacity(0.065)
+    static let subtleFill = Color.primary.opacity(0.055)
 }
 
 /// 圆角卡片，可带标题 / 副标题 / 右侧说明
@@ -46,7 +47,7 @@ struct Card<Content: View>: View {
             }
             content
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).fill(Theme.cardFill))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).strokeBorder(Theme.cardStroke, lineWidth: 1))
@@ -121,6 +122,7 @@ struct RoundIconButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(help.isEmpty ? systemName : help)
         .help(help)
     }
 }
@@ -216,10 +218,25 @@ struct AutoHeightScroll<Content: View>: View {
         self.maxHeight = maxHeight; self.content = content()
     }
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical, showsIndicators: true) {
             content.background(GeometryReader { g in Color.clear.preference(key: HeightKey.self, value: g.size.height) })
         }
         .frame(height: min(max(height, 40), maxHeight))
         .onPreferenceChange(HeightKey.self) { h in height = h }
+    }
+}
+
+/// Shared identity for the panel and the bundled Finder icon.
+struct BrandIcon: View {
+    var body: some View {
+        Group {
+            if let url = Bundle.main.url(forResource: "BrandIcon", withExtension: "png"),
+               let image = NSImage(contentsOf: url) {
+                Image(nsImage: image).resizable().interpolation(.high)
+            } else {
+                Image(systemName: "display").resizable().scaledToFit().padding(8).foregroundColor(Theme.accent)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }

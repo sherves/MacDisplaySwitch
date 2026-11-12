@@ -1,0 +1,1 @@
+273baef38a870da447f8b06f7825a4726016a7f5ea97cd2203161d08c189a83e  DisplayFocus-0.5.0-macOS-x86_64.zip

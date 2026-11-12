@@ -61,20 +61,71 @@ final class DisplaySafetyTests {
         let hidpi = ModeInfo(id: 17, width: 1920, height: 1080, pixelWidth: 3840, pixelHeight: 2160, refreshRate: 144, isUsable: true)
         expectFalse(hidpi.matches(desired))
     }
-    func testPersistentProfileMatchesIdentityAcrossDisplayIDChanges() {
-        let profile = AutomaticDisplayProfile(builtin: "builtin", external: external, environment: "driver-A")
-        expectTrue(profile.allows([panel(90), panel(200, identity: "external", builtin: false, main: true, hz: 144.049)], environment: "driver-A"))
-        expectFalse(profile.allows([panel(), external], environment: "driver-B"))
-        expectFalse(profile.allows([panel(identity: "other-panel"), external], environment: "driver-A"))
-        expectFalse(profile.allows([panel(), panel(2, identity: "other-display", builtin: false, main: true, hz: 144.049)], environment: "driver-A"))
+    func testAutomationNeedsNoSavedProfileOrDriverFingerprint() {
+        // This models a clean install or a driver update with an obsolete saved profile.
+        let suite = "DisplayFocus-AutoChecks-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        Store.defaultsOverride = defaults
+        defer { Store.defaultsOverride = nil; defaults.removePersistentDomain(forName: suite) }
+        expectTrue(AutomaticDisplayPolicy.allows([panel(), external]))
+        defaults.set(Data("obsolete driver and profile".utf8), forKey: "DisplayFocus.automaticProfile.v1")
+        expectTrue(AutomaticDisplayPolicy.allows([panel(90), panel(200, identity: "new-external", builtin: false, main: true, hz: 60)]))
+        expectTrue(AutomaticDisplayPolicy.allows([panel(identity: "new-panel"), external]))
     }
-    func testPersistentProfileRejectsChangedModeAndSleepingOrMissingOutput() {
-        let profile = AutomaticDisplayProfile(builtin: "builtin", external: external, environment: "driver-A")
-        expectFalse(profile.allows([panel()], environment: "driver-A"))
-        expectFalse(profile.allows([panel(), panel(2, identity: "external", builtin: false, main: true, hz: 60)], environment: "driver-A"))
-        expectFalse(profile.allows([panel(), panel(2, identity: "external", builtin: false, asleep: true, main: true, hz: 144.049)], environment: "driver-A"))
-        expectFalse(profile.allows([panel(mirror: 2), external], environment: "driver-A"))
-        expectFalse(profile.allows([panel(), external, panel(3, identity: "external", builtin: false)], environment: "driver-A"))
+    func testAutomationWaitsForRealExternalWithoutChangingItsMode() {
+        expectFalse(AutomaticDisplayPolicy.allows([panel()]))
+        expectTrue(AutomaticDisplayPolicy.allows([panel(), panel(2, identity: "external", builtin: false, main: true, hz: 60)]))
+        expectFalse(AutomaticDisplayPolicy.allows([panel(), panel(2, identity: "external", builtin: false, asleep: true)]))
+        expectFalse(AutomaticDisplayPolicy.allows([panel(mirror: 2), external]))
+        expectFalse(AutomaticDisplayPolicy.allows([panel(), external, external]))
+        var placeholder = external; placeholder.synthetic = true
+        expectFalse(AutomaticDisplayPolicy.allows([panel(), placeholder]))
+    }
+    func testStartupResumesLegacyDisabledSettingsAndRemovesConfirmation() {
+        let suite = "DisplayFocus-StartupChecks-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        Store.defaultsOverride = defaults
+        defer { Store.defaultsOverride = nil; defaults.removePersistentDomain(forName: suite) }
+        expectTrue(Store.autoEnabled) // new installs default on
+        Store.autoEnabled = false
+        defaults.set("old permanent pause", forKey: "DisplayFocus.autoPauseReason")
+        defaults.set(Data("old profile".utf8), forKey: "DisplayFocus.automaticProfile.v1")
+        AutomaticDisplayPolicy.resume()
+        expectTrue(Store.autoEnabled)
+        expectTrue(defaults.object(forKey: "DisplayFocus.autoPauseReason") == nil)
+        expectTrue(defaults.object(forKey: "DisplayFocus.automaticProfile.v1") == nil)
+        AutomaticDisplayPolicy.pause("temporary failure")
+        expectTrue(Store.autoEnabled) // errors must never turn the feature off
+        expectFalse(AutomaticDisplayPolicy.retryAllowed)
+        AutomaticDisplayPolicy.resume()
+        expectTrue(AutomaticDisplayPolicy.retryAllowed)
+    }
+    func testRetryCooldownExpiresAndNeverBlocksNextBoot() {
+        let retry = AutomaticRetryState(boot: "A", until: 100, reason: "temporary")
+        expectFalse(retry.ready(boot: "A", uptime: 99.9))
+        expectTrue(retry.ready(boot: "A", uptime: 100))
+        expectTrue(retry.ready(boot: "A", uptime: 1000))
+        expectTrue(retry.ready(boot: "B", uptime: 1))
+    }
+    func testAutomaticTransactionNeverShowsManualConfirmation() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("DisplayFocusPendingChecks-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        DisplayTrial.recoveryFolderOverride = root
+        defer { DisplayTrial.recoveryFolderOverride = nil; try? FileManager.default.removeItem(at: root) }
+        var ticket = DisplayTrial.Ticket(token: "test", boot: DisplayTrial.bootIdentity,
+            before: [panel(), external], builtin: "builtin", external: "external", deadline: 100,
+            changed: false, state: "armed", detail: "fixture", automatic: true)
+        let file = root.appendingPathComponent("trial.json")
+        try JSONEncoder().encode(ticket).write(to: file, options: .atomic)
+        expectFalse(DisplayTrial.isPending)
+        expectEqual(DisplayTrial.secondsLeft, 0)
+        expectTrue(DisplayTrial.transactionPending)
+        ticket.automatic = false
+        try JSONEncoder().encode(ticket).write(to: file, options: .atomic)
+        expectTrue(DisplayTrial.isPending)
+        ticket.state = "restored"
+        try JSONEncoder().encode(ticket).write(to: file, options: .atomic)
+        expectFalse(DisplayTrial.transactionPending)
     }
     func testStabilityRequiresContinuousPresenceAndRestartsAfterChange() {
         var gate = DisplayStabilityGate()
@@ -148,8 +199,11 @@ struct RunSafetyChecks {
         checks.testPhysicalUnplugTriggersRecoveryImmediately()
         checks.testDeadlineTriggersRecoveryEvenIfCGReportsHealthy()
         checks.testModeReadbackDoesNotTrustModeID()
-        checks.testPersistentProfileMatchesIdentityAcrossDisplayIDChanges()
-        checks.testPersistentProfileRejectsChangedModeAndSleepingOrMissingOutput()
+        checks.testAutomationNeedsNoSavedProfileOrDriverFingerprint()
+        checks.testAutomationWaitsForRealExternalWithoutChangingItsMode()
+        checks.testStartupResumesLegacyDisabledSettingsAndRemovesConfirmation()
+        checks.testRetryCooldownExpiresAndNeverBlocksNextBoot()
+        try checks.testAutomaticTransactionNeverShowsManualConfirmation()
         checks.testStabilityRequiresContinuousPresenceAndRestartsAfterChange()
         checks.testConfirmedMonitorRecoversLossButDoesNotRevertUserModeChanges()
         checks.testLateConfirmationRemembersOnlyRecentSuccessfullyRestoredManualTests()
@@ -160,7 +214,7 @@ struct RunSafetyChecks {
         expectTrue(live.allSatisfy { CGDisplayVendorNumber($0.id) != UInt32.max && CGDisplayModelNumber($0.id) != UInt32.max })
         try checkIndependentWatchdog()
         try checkConfirmedMonitor()
-        print("PASS: 16 display safety checks + independent deadline and persistent monitor processes (no display configuration or real preferences changed)")
+        print("PASS: 19 display automation checks + independent deadline and persistent monitor processes (no display configuration or real preferences changed)")
     }
 }
 

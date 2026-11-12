@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 — 2026-11-08 (published 2026-11-13)
+
+- Default to persistent automatic external-only operation after login/app start.
+- Remove OS/driver fingerprint and stored-confirmation prerequisites; driver changes no longer ask for a manual test.
+- Replace permanent failure pauses with boot-scoped 60-second retry cooldowns.
+- Keep the user login agent running with RunAtLoad and KeepAlive, with a 10-second restart throttle.
+- Show direct external-only and temporary panel-restore actions; automatic switching requires no confirmation countdown.
+- Retain stable-identity recovery, actual mode readback, external-loss monitoring and refresh-rate preservation.
+- Pass 19 automation checks and real login-agent/relaunch readback checks; true reboot/driver-upgrade acceptance remains unverified.
+
+## 0.4.0 — 2026-10-31
+
+- Add app/menu icons and a shared blue-violet/teal visual identity.
+- Refresh all four pages for light/dark appearances and expose automation state in the overview.
+
 ## 0.3.2 — 2026-10-28
 
 Initial public source snapshot, published as **MacDisplaySwitch for macOS**. The app bundle, executables and preference domain retain the original DisplayFocus name for compatibility.

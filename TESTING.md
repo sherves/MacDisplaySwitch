@@ -1,5 +1,29 @@
 # Validation and remaining work
 
+## 0.5.0 — 2026-11-08
+
+- Release build, complete bundle packaging and strict ad-hoc signature verification passed.
+- 19 automation checks plus independent deadline/persistent-monitor process fixtures passed without modifying live displays or real preferences. Added coverage includes no/malformed/obsolete confirmation profiles, a newly encountered external/mode, default-enabled and old-disabled setting migration, cooldown expiry across boot sessions, and no manual countdown for automatic transactions.
+- In the existing graphical login session, deployment through the actual LaunchAgent automatically disabled the built-in panel without a test/confirmation click. Readback showed external 2560×1440@144Hz active/main/non-mirrored and panel inactive.
+- Observation continued beyond the old 25-second confirmation window with automatic monitoring active.
+- Sending TERM to the GUI led launchd to start a new PID. Readback still showed panel inactive, external 144Hz, automation enabled and monitor alive.
+- Driver binaries and the auxiliary kernel collection matched their pre-deployment checksums. Existing mode preferences were retained.
+- Version 0.4.0 introduced new icons and a refreshed UI; its four pages were rendered in light/dark appearances and visually reviewed.
+
+These 0.5.0 observations are program readback/process evidence, not new owner-observed hot-plug or backlight tests. No reboot, graphics-driver installation, fresh physical HDMI cycle or long-duration qualification was performed in this update. Startup testing used the real login agent inside an existing login session. Native Macs, Apple Silicon, multiple external outputs and sleep/wake remain unqualified.
+
+## Suggested validation
+
+On a suitable test machine, distinguish physical observations from readback. Check login startup, no external present, external connection/disconnection, app restart, helper loss and a real driver upgrade. Verify external image/input and preserved refresh rate. Opening 0.5.0 enables automation; use `login off` then `enable-builtin` to stop it completely. Do not deliberately hang a kernel/driver to test recovery.
+
+---
+
+# Historical 0.3.2 evidence
+
+The following is historical. Its manual-confirmation, profile-invalidation and permanent-pause behavior was replaced in 0.5.0.
+
+# Validation and remaining work
+
 Snapshot: **0.3.2**, 2026-10-28. Observations below distinguish program readback from the owner's physical reports. No automatic reboot was performed.
 
 ## Test machine

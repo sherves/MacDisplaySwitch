@@ -145,10 +145,14 @@ public enum DisplayTrial {
     private static var lockURL: URL { folder.appendingPathComponent("trial.lock") }
     public static var isPending: Bool {
         guard let t = try? read() else { return false }
+        return t.boot == bootIdentity && t.state == "armed" && t.automatic != true
+    }
+    static var transactionPending: Bool {
+        guard let t = try? read() else { return false }
         return t.boot == bootIdentity && t.state == "armed"
     }
     public static var secondsLeft: Int {
-        guard let t = try? read(), t.boot == bootIdentity, t.state == "armed" else { return 0 }
+        guard let t = try? read(), t.boot == bootIdentity, t.state == "armed", t.automatic != true else { return 0 }
         return max(0, Int(ceil(t.deadline - ProcessInfo.processInfo.systemUptime)))
     }
     public static var isMonitoring: Bool {
@@ -199,7 +203,7 @@ public enum DisplayTrial {
         let before = DisplaySafety.records()
         let (builtin, external) = try DisplaySafety.targets(before)
         if automatic && !AutomaticDisplayPolicy.allows(before) {
-            throw SafetyError.refused("当前外屏、模式或驱动未经确认，未执行自动关闭")
+            throw SafetyError.refused("当前没有可用的内屏和外接显示器")
         }
         guard DisplayManager.privateDisableAvailable else { throw DisplayError.privateAPIUnavailable }
         guard FileManager.default.isExecutableFile(atPath: helper.path) else {
@@ -258,9 +262,8 @@ public enum DisplayTrial {
     public static func confirm() throws {
         try locked {
             var t = try read()
-            // A delayed UI/chat response must not bypass the watchdog deadline. If it already
-            // restored successfully, remember the physically confirmed profile WITHOUT changing
-            // displays; automation will perform a fresh, independently protected transaction.
+            // Legacy manual CLI trials may acknowledge a recently restored test;
+            // normal automatic operation never asks for human confirmation.
             if canRememberRestoredTest(t, boot: bootIdentity, uptime: ProcessInfo.processInfo.systemUptime) {
                 let now = DisplaySafety.records()
                 let targets = try DisplaySafety.targets(now)
@@ -268,8 +271,7 @@ public enum DisplayTrial {
                       let ext = t.before.first(where: { $0.identity == t.external }), targets.1.sameMode(as: ext) else {
                     throw SafetyError.refused("测试后的外屏配置已变化，请重新测试")
                 }
-                try AutomaticDisplayPolicy.remember(builtin: t.builtin, external: ext)
-                t.detail = "已收到对此次测试的确认；配置已记住，超时恢复不撤销；自动模式将另做受保护切换"
+                t.detail = "手动测试已结束；自动模式将自动执行仅外屏"
                 try write(t)
                 return
             }
@@ -277,11 +279,7 @@ public enum DisplayTrial {
                 throw SafetyError.refused("确认已超时或配置已恢复，请重新测试")
             }
             try DisplaySafety.validateDisabled(t.before, builtin: t.builtin, external: t.external, now: DisplaySafety.records())
-            guard let external = t.before.first(where: { $0.identity == t.external }) else {
-                throw SafetyError.refused("确认记录缺少外屏身份")
-            }
-            try AutomaticDisplayPolicy.remember(builtin: t.builtin, external: external)
-            t.state = "monitoring"; t.detail = "用户已确认外屏可操作；已记住此模式，独立监控外屏失联；背光以目视为准"
+            t.state = "monitoring"; t.detail = "已保留仅外屏；外屏断开时恢复内屏"
             try write(t)
             DisplayManager.builtinState = .disabled
             Store.defaults.set(bootIdentity + ":" + t.external, forKey: "DisplayFocus.confirmedDisable")
@@ -301,10 +299,10 @@ public enum DisplayTrial {
             guard t.boot == bootIdentity, t.state == "armed", t.automatic == true,
                   Store.autoEnabled, AutomaticDisplayPolicy.allows(t.before),
                   ProcessInfo.processInfo.systemUptime < t.deadline else {
-                throw SafetyError.refused("自动关闭授权不再匹配，恢复内屏")
+                throw SafetyError.refused("显示器配置已变化，重新连接内屏")
             }
             try DisplaySafety.validateDisabled(t.before, builtin: t.builtin, external: t.external, now: DisplaySafety.records())
-            t.state = "monitoring"; t.detail = "依据已确认的外屏配置自动关闭；状态读回通过，外屏失联监控中"
+            t.state = "monitoring"; t.detail = "已自动仅外屏，外屏断开时恢复内屏"
             try write(t)
             DisplayManager.builtinState = .disabled
         }
@@ -322,7 +320,7 @@ public enum DisplayTrial {
             guard t.state == "armed" || t.state == "monitoring" || (token == nil && t.state == "confirmed") else { return }
             let monitoring = t.state == "monitoring"
             if t.automatic == true && !monitoring {
-                AutomaticDisplayPolicy.pause("自动关闭未完成确认或保护期限已到；已暂停自动重试")
+                AutomaticDisplayPolicy.pause("自动关闭暂未完成")
             }
             // Clear any previous authorization before recovery, preventing automatic retry loops.
             if t.changed { Store.defaults.removeObject(forKey: "DisplayFocus.confirmedDisable") }
@@ -335,7 +333,7 @@ public enum DisplayTrial {
                 }
                 t.state = "restored"; t.detail = "已恢复切换前的显示配置"
             } catch {
-                if t.changed { AutomaticDisplayPolicy.pause("恢复内屏未能确认，请检查实体显示后手动重新开启自动模式") }
+                if t.changed { AutomaticDisplayPolicy.pause("恢复内屏暂未完成") }
                 t.state = "recoveryFailed"; t.detail = "自动恢复未能确认：\(error)"
                 try write(t)
                 throw error

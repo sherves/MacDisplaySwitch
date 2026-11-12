@@ -20,7 +20,7 @@ func usage() {
       diagnose                   只读枚举在线/活动/镜像/身份/模式状态
       enable-builtin             重新开启内建屏（自动处理“关闭”或“镜像”两种状态）
       status                     显示内建屏状态、自动模式、记住的模式
-      auto on|off|status         开关自动模式（需菜单栏 App 运行才会生效）
+      auto on|off|status         开启/本次暂停自动模式；应用启动自动开启
       forget <displayID>         忘记该外接屏记住的模式
       restore <displayID>        立即恢复该外接屏记住的模式
       scale <displayID>          列出缩放选项（看起来像 W×H、百分比、是否 HiDPI）
@@ -127,8 +127,8 @@ case "status":
     }
 case "auto":
     switch a.count > 1 ? a[1] : "status" {
-    case "on": Store.autoEnabled = true; Store.defaults.removeObject(forKey: "DisplayFocus.autoPauseReason"); print("自动模式：开；\(AutomaticDisplayPolicy.status)（需菜单栏 App 运行）")
-    case "off": Store.autoEnabled = false; print("自动模式：关")
+    case "on": AutomaticDisplayPolicy.resume(); print("自动模式：开；\(AutomaticDisplayPolicy.status)（需菜单栏 App 运行）")
+    case "off": Store.autoEnabled = false; print("自动模式：本次暂停；重新启动应用或登录后自动开启")
     default: print("自动模式：\(Store.autoEnabled ? "开" : "关")")
     }
 case "forget":

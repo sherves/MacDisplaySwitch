@@ -1,38 +1,27 @@
 # Display automation design
 
-## Components
+## Policy
 
-- `DisplaySafety`: enumerate CGS display records, prefer stable UUIDs, filter invalid/synthetic placeholders, reject ambiguous identities and mirroring.
-- `DisplayTrial`: persist a boot-scoped transaction before changing displays, start a separate CLI and require its ready handshake, establish the external as main, disable the panel and validate actual state.
-- `AutomaticDisplayPolicy`: store a physically confirmed panel/external/mode/environment profile. It never substitutes display IDs for durable identity.
-- `AutoController`: callback plus 2-second polling, an 8-second startup wait, a 4-second stability gate and a maximum of six actions per minute.
-- `DisplayFocusRecovery`: bundled CLI that owns the manual deadline and the continuing external-loss monitor independently of the GUI.
+0.5.0 evaluates live display records. It requires a usable built-in panel and a real, active, non-mirrored external display with unique identities. It does not read an OS/driver fingerprint or demand a saved confirmation profile. Every application start enables automation and removes legacy confirmation/permanent-pause records.
 
-## Transaction lifecycle
+The controller waits 8 seconds at startup and 4 seconds of stable configuration. Callback notifications and a 2-second poll detect changes. Temporary errors preserve the enabled preference and set a boot-scoped 60-second retry cooldown. A new boot or app start clears obsolete retry state. The controller limits actions to six per minute.
 
-1. `armed`: before any mutation, save original identities, layout and modes, boot-session UUID, monotonic deadline and a unique transaction token.
-2. Wait for the helper's ready file and living process. Refuse disabling if it is missing.
-3. Make the external primary without changing its mode, verify it and all original external outputs, then request panel disable. Check actual active state and preserved modes.
-4. Manual confirmation before 25 seconds transitions to `monitoring` and saves the verified profile. Automatic confirmation only accepts an already verified profile and does not claim a new human observation.
-5. Pending timeout/external loss attempts the original snapshot recovery. After confirmation, external loss restores only the panel, without replaying stale external modes/layout.
-6. Recovery finishes as `restored` or `recoveryFailed`. A failed recovery pauses auto mode. Healthy confirmed monitoring is not subject to the original 25-second deadline.
+## Transaction and recovery
 
-An explicitly delayed confirmation may remember a manual test that already restored successfully within five minutes after its deadline. It must match the same boot, identities and external mode; it does not undo the timeout recovery or re-disable a display. Any later automatic close is a fresh guarded transaction. See the fixture checks for the acceptance conditions.
+`DisplayTrial` writes a boot-scoped, tokenized ticket before touching displays. A separate bundled CLI must complete its ready handshake. The app establishes the external as main without changing its mode, requests built-in disable and verifies the active state, external outputs, resolution and refresh rate.
 
-## Identity during hot-plug
+Automatic transactions transition to `monitoring` after readback without user input. Their internal transition deadline is not shown as a manual confirmation countdown. Monitoring continues past that deadline; external loss restores only the panel rather than replaying stale external modes/layout. A pending failed transaction attempts snapshot recovery. An absent helper causes panel restoration and a later automatic retry. API success or PID liveness alone cannot establish physical usability or kernel progress.
 
-The tested driver temporarily exposed changing display IDs, a false builtin flag on an external identity, and virtual fallback outputs. Recovery therefore targets the saved physical panel UUID and resolves its current ID each time. It refuses a missing/ambiguous target instead of selecting the first or primary display. A synthetic 1x1 output is not accepted as recovery success.
+The legacy manual CLI trial retains its 25-second confirmation flow for optional diagnostics. It is not part of the automatic startup path, and its confirmation no longer stores an automation profile.
 
-Retries are bounded to 20 seconds, at most one enable request every three seconds. Successful API return values do not alone establish success; active, online, non-sleeping and mode state are read back. Readback still cannot prove real scan-out or physical usability.
+Recovery resolves the recorded physical panel UUID to its current display ID. It rejects missing/ambiguous targets, synthetic outputs and virtual placeholders. The tested driver sometimes changed display IDs and mislabeled the external as built-in during hot-plug. Each panel-enable attempt is bounded to 20 seconds, with requests spaced by three seconds; failed controller operations may be retried in later cooldown periods.
 
-## Boot and process lifetime
+## Process lifetime
 
-Use `kern.bootsessionuuid`, not `kern.boottime`: the latter changed by one second during time synchronization in testing and caused a prior monitor to exit despite no reboot. If boot-session lookup fails, a process-local random UUID prevents cross-process transaction matching, so disable handshake fails before mutation. Recovery tokens also keep an old helper from acting on a new ticket.
+Transactions use `kern.bootsessionuuid` and unique tokens so an old helper cannot act on a new boot or ticket. Ready files contain helper PIDs for liveness checks. The GUI and CLI share the preference domain.
 
-Ready files contain the helper PID; the GUI checks liveness. If a managed panel disable loses its helper, the GUI pauses automation and attempts panel restoration. PID reuse and a hung WindowServer remain limitations; liveness is not proof of progress.
+The user LaunchAgent runs the installed GUI directly with RunAtLoad and KeepAlive=true, throttled to 10 seconds. The GUI maintains next-login configuration without unloading itself or spawning another copy. Each startup restores automatic mode; explicit manual panel restore/CLI `auto off` pauses only until the next app start/login. To stop entirely, unregister the login agent before restoring the panel. Opening the app again maintains the login item.
 
-## Permissions and optional features
+## Optional features and permissions
 
-The core automatic display path runs in the user session and does not require administrator rights or alter EFI, GPU drivers, network settings or security policy. The optional HiDPI override action asks for administrator authentication to write its exact system override path. Software gamma is not hardware brightness; text-size settings use an undocumented preference.
-
-The disable/enumeration functionality dynamically loads private SkyLight symbols. Future macOS releases or drivers can remove or change them. The OS/driver fingerprint currently includes SystemVersion and specific NullMoth files; it is not a complete inventory of arbitrary graphics drivers or firmware, and is cached for each process lifetime. Restart the app after environmental changes and re-test.
+Core display switching runs in the user session. It does not modify EFI, kernel extensions, graphics drivers, networking or security settings. It dynamically loads private SkyLight symbols whose behavior may change. HiDPI override editing separately requests administrator authentication; gamma adjustment is software-only, and text size uses an undocumented preference.

@@ -5,7 +5,8 @@ cd "$(dirname "$0")/.."
 [ "${SKIP_SWIFT_BUILD:-}" = 1 ] || swift build -c release
 BIN=.build/release
 APP=build/DisplayFocus.app
-rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS"
+rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp Resources/AppIcon.icns Resources/BrandIcon.png Resources/MenuIcon.png "$APP/Contents/Resources/"
 cp "$BIN/DisplayFocusApp" "$APP/Contents/MacOS/DisplayFocus"
 cp "$BIN/displayfocus" "$APP/Contents/MacOS/DisplayFocusRecovery"
 # Case-insensitive macOS volumes must not alias the GUI and recovery helper.
@@ -20,9 +21,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleName</key><string>DisplayFocus</string>
 <key>CFBundleIdentifier</key><string>com.holmes.displayfocus</string>
 <key>CFBundleExecutable</key><string>DisplayFocus</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.2</string>
-<key>CFBundleVersion</key><string>20261028.4</string>
+<key>CFBundleShortVersionString</key><string>0.5.0</string>
+<key>CFBundleVersion</key><string>20261108.1</string>
 <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>

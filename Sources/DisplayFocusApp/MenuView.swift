@@ -26,13 +26,13 @@ extension LightScene {
 
 struct MenuView: View {
     @ObservedObject var m: Model
-    @State private var tab: MenuTab = .overview
+    @State var tab: MenuTab = .overview
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
             tabBar
-            AutoHeightScroll(maxHeight: 400) {
+            AutoHeightScroll(maxHeight: 440) {
                 VStack(alignment: .leading, spacing: 12) {
                     switch tab {
                     case .overview: overviewTab
@@ -43,35 +43,31 @@ struct MenuView: View {
                 }
                 .padding(.bottom, 2)
             }
-            if !m.message.isEmpty {
+            if m.trialPending { trialBanner }
+            if !m.message.isEmpty && !m.trialPending {
                 Text(m.message)
                     .font(.system(size: 11)).foregroundColor(.secondary)
-                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.cardFill))
             }
             footer
         }
-        .padding(16)
-        .frame(width: 372)
+        .padding(18)
+        .frame(width: 408)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .tint(Theme.accent)
     }
 
     // MARK: - 顶部
 
     private var header: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                Image(systemName: m.selectedDisplay?.isBuiltin == true ? "laptopcomputer" : "display")
-                    .font(.system(size: 17, weight: .semibold)).foregroundColor(.white)
-            }
-            .frame(width: 40, height: 40)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(m.selectedDisplay?.name ?? "DisplayFocus").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                Text(m.headerSubtitle).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+            BrandIcon().frame(width: 46, height: 46)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("DisplayFocus").font(.system(size: 18, weight: .bold, design: .rounded))
+                Text("让目光，专注一屏").font(.system(size: 11)).foregroundColor(.secondary)
             }
             Spacer(minLength: 4)
             if m.displays.count > 1 {
@@ -98,12 +94,12 @@ struct MenuView: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { tab = t }
                 } label: {
-                    VStack(spacing: 3) {
+                    HStack(spacing: 5) {
                         Image(systemName: t.icon).font(.system(size: 14, weight: .medium))
                         Text(t.title).font(.system(size: 11, weight: sel ? .semibold : .regular))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 10)
                     .foregroundColor(sel ? Theme.accent : .secondary)
                     .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(sel ? Theme.accent.opacity(0.16) : Color.clear))
                     .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -121,7 +117,7 @@ struct MenuView: View {
             Circle().fill(m.builtinState == .enabled ? Color.green : Theme.accent).frame(width: 6, height: 6)
             Text(m.statusLine).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
             Spacer()
-            RoundIconButton(systemName: "power", size: 28, help: "退出 DisplayFocus") { NSApp.terminate(nil) }
+            RoundIconButton(systemName: "arrow.clockwise.circle", size: 28, help: "重新启动 DisplayFocus") { NSApp.terminate(nil) }
         }
     }
 
@@ -130,50 +126,82 @@ struct MenuView: View {
     @ViewBuilder private var overviewTab: some View {
         previewCard
         Card("内建屏", icon: "laptopcomputer", trailing: m.builtinState.zh) {
-            if m.trialPending {
-                Text("请确认外屏画面、鼠标及远控正常。\(m.trialSeconds) 秒后自动尝试恢复。")
-                    .font(.system(size: 12)).foregroundColor(.orange)
-                HStack {
-                    PillButton(title: "外屏正常，保留", icon: "checkmark.circle") { m.confirmDisable() }
-                    PillButton(title: "立即恢复", icon: "arrow.uturn.backward") { m.recoverDisplay() }
-                }
-            } else {
-                HStack(spacing: 8) {
-                    PillButton(title: "测试关闭内屏", icon: "moon.zzz", enabled: m.canTestDisable) { m.testDisable() }
-                    PillButton(title: "恢复内屏", icon: "sun.max") { m.recoverDisplay() }
-                }
+            HStack(spacing: 8) {
+                PillButton(title: "立即仅外屏", icon: "moon.zzz", selected: true,
+                           enabled: m.canUseExternalOnly && !m.trialPending) { m.useExternalOnly() }
+                PillButton(title: "临时恢复内屏", icon: "sun.max") { m.recoverDisplay() }
             }
-            Text("已移除镜像关闭。关闭指逻辑停用，不保证背光熄灭；驱动卡死时自动恢复也可能失败。")
+            Text("登录后自动仅外屏，驱动更新无需重新确认。拔掉外屏时恢复内屏，接回后自动关闭。")
                 .font(.system(size: 11)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+        Card("自动仅外屏", icon: "bolt.shield") {
+            Text(AutomaticDisplayPolicy.status)
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                TagLabel(text: m.autoOn ? "自动模式已开启" : "本次临时恢复", color: m.autoOn ? Theme.accent : .secondary)
+                Spacer()
+                Button("管理设置") { tab = .settings }.buttonStyle(.plain).font(.system(size: 11, weight: .medium)).foregroundColor(Theme.accent)
+            }
+        }
         brightnessCard(compact: true)
-        scenesCard
+    }
+
+    private var trialBanner: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "clock.arrow.circlepath").foregroundColor(.orange)
+                Text("外屏显示正常吗？").font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text("\(m.trialSeconds) 秒").font(.system(size: 16, weight: .bold, design: .rounded)).monospacedDigit()
+            }
+            Text("确认画面、鼠标和远控可用。超时将尝试恢复内屏。")
+                .font(.system(size: 11)).foregroundColor(.secondary)
+            HStack {
+                PillButton(title: "外屏正常，保留", icon: "checkmark", selected: true) { m.confirmDisable() }
+                PillButton(title: "立即恢复", icon: "arrow.uturn.backward") { m.recoverDisplay() }
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.orange.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.orange.opacity(0.3)))
     }
 
     private var previewCard: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinearGradient(colors: [Theme.accent.opacity(0.35), Theme.accent.opacity(0.06)],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 3)
-                VStack(spacing: 6) {
-                    if let c = m.current {
-                        Text("\(c.width) × \(c.height)")
-                            .font(.system(size: 26, weight: .semibold, design: .rounded)).monospacedDigit()
-                        Text(previewDetail(c)).font(.system(size: 11)).foregroundColor(.secondary)
-                    } else {
-                        Text("未检测到显示器").font(.system(size: 14)).foregroundColor(.secondary)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 8) {
+                Image(systemName: m.selectedIsBuiltin ? "laptopcomputer" : "display")
+                Text(m.selectedDisplay?.name ?? "未连接显示器").font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Spacer()
+                if m.selectedDisplay?.isMain == true { TagLabel(text: "主显示器", color: .white) }
             }
-            .frame(height: 118)
-            // 支架
-            RoundedRectangle(cornerRadius: 2).fill(Color.primary.opacity(0.15)).frame(width: 64, height: 5)
+            if let c = m.current {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(String(c.width)).font(.system(size: 34, weight: .semibold, design: .rounded))
+                    Text("×").font(.system(size: 20, weight: .light)).opacity(0.55)
+                    Text(String(c.height)).font(.system(size: 34, weight: .semibold, design: .rounded))
+                }.monospacedDigit().minimumScaleFactor(0.8).lineLimit(1)
+                HStack {
+                    Label(ModeInfo.hzText(c.refreshRate), systemImage: "waveform.path").font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Text(c.isHiDPI ? "HiDPI · 清晰显示" : "标准像素显示").font(.system(size: 11)).opacity(0.75)
+                }
+            } else {
+                Text("等待显示器连接").font(.system(size: 22, weight: .semibold))
+                Text("连接后即可查看画面与显示设置").font(.system(size: 12)).opacity(0.75)
+            }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 6)
+        .foregroundColor(.white)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ZStack(alignment: .topTrailing) {
+                LinearGradient(colors: [Color(red: 0.20, green: 0.24, blue: 0.55), Color(red: 0.12, green: 0.15, blue: 0.30)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                Circle().fill(Theme.aqua.opacity(0.13)).frame(width: 160, height: 160).offset(x: 65, y: -65)
+                Circle().strokeBorder(Color.white.opacity(0.07), lineWidth: 1).frame(width: 220, height: 220).offset(x: 70, y: -80)
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private func previewDetail(_ c: ModeInfo) -> String {
@@ -215,7 +243,7 @@ struct MenuView: View {
     private func brightnessCard(compact: Bool) -> some View {
         Card {
             ValueSlider(title: "软件调光", caption: compact ? "Gamma 软件压暗" : "在硬件亮度基础上再压暗（低于 \(SoftwareLight.minEffective)% 按 \(SoftwareLight.minEffective)% 处理）",
-                        icon: "sun.min", valueText: "\(m.light.brightness)", value: m.light.brightness) { m.setBrightness($0) }
+                        icon: "sun.min", valueText: "\(m.light.brightness)%", value: m.light.brightness) { m.setBrightness($0) }
         }
     }
 
@@ -304,16 +332,16 @@ struct MenuView: View {
 
     @ViewBuilder private var settingsTab: some View {
         textSizeCard
-        Card {
-            Toggle(isOn: Binding(get: { m.autoOn }, set: { m.setAuto($0) })) {
-                toggleLabel("自动仅外屏", "确认一次后，登录和接屏自动关闭内屏；拔屏恢复，失败暂停")
-            }
-            .toggleStyle(.switch).tint(Theme.accent)
+        Card("自动仅外屏", icon: "bolt.fill", trailing: "持续开启") {
+            Text("登录后自动运行，外屏连接稳定后关闭内屏。驱动更新、重新登录和外屏重连均无需点击确认。")
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Divider().opacity(0.5)
-            Toggle(isOn: Binding(get: { m.loginOn }, set: { m.setLogin($0) })) {
-                toggleLabel("登录时启动", "通过 LaunchAgent 在登录后自动运行")
+            infoRow("登录时启动", m.loginOn ? "已开启" : "正在设置")
+            infoRow("自动切换", m.autoOn ? "已开启" : "本次临时恢复内屏")
+            if !m.autoOn {
+                WideButton(title: "恢复自动仅外屏", icon: "display") { m.setAuto(true) }
             }
-            .toggleStyle(.switch).tint(Theme.accent)
         }
         Card("最近自动操作", icon: "clock.arrow.circlepath") {
             Text(m.lastAuto.isEmpty ? "暂无" : m.lastAuto)

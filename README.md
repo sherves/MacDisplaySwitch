@@ -1,36 +1,30 @@
 # MacDisplaySwitch for macOS
 
-**Experimental macOS menu bar display utility · 实验性 macOS 外屏切换工具**
+**Automatic external-only display utility · macOS 自动仅外屏工具**
 
-Connect a previously verified external monitor to use it as the only active display. Disconnect it to attempt to restore the built-in panel. Keep the monitor's existing resolution and refresh rate. A separate recovery process watches the transition and subsequent external-display loss.
+Version **0.5.0** closes the built-in display automatically after login when an external display is available. Driver updates no longer require a manual test or confirmation. Unplugging the external attempts to restore the built-in panel; reconnecting resumes external-only operation. Existing resolution and refresh rate are preserved.
 
-The open-source project is named **MacDisplaySwitch**. The executable, app bundle and preference domain retain the original **DisplayFocus** name for compatibility with existing installations.
+The project is named **MacDisplaySwitch**. The application, executables and preference domain retain **DisplayFocus** for compatibility.
 
-Version **0.3.2** is a source release, developed and tested on one Intel/OpenCore laptop. It uses private SkyLight APIs, is not notarized, and is **not a general guarantee of compatibility or recovery**. A hung driver or WindowServer can prevent recovery. Logical disable does not guarantee that the panel backlight powers off.
+## Download 0.5.0
 
-[中文说明](#中文说明) · [Design](DESIGN.md) · [Test evidence and limits](TESTING.md) · [Changes](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+[Download the Intel macOS app](https://github.com/sherves/MacDisplaySwitch/raw/refs/heads/main/Downloads/0.5.0/DisplayFocus-0.5.0-macOS-x86_64.zip) · [SHA256](Downloads/0.5.0/SHA256SUMS.txt)
 
-## Features
+The source is available in this repository through **Code → Download ZIP**, or the build instructions below.
 
-- One-time physical confirmation for a particular panel, external display, mode and OS/driver fingerprint.
-- A 25-second confirmation deadline handled by a separate bundled CLI; recovery is attempted if not confirmed.
-- External-loss monitoring continues after confirmation, even when the menu app exits.
-- Automatic mode waits 8 seconds at app startup and requires 4 seconds of stable display configuration.
-- Recovery resolves the panel's saved UUID to its current display ID, rejecting ambiguous targets and virtual placeholders.
-- Automatic display switching does not replay stored modes or use a mirroring fallback.
-- Optional user LaunchAgent starts the menu app after login; normal quit stays quit, crashes are throttled.
-- Display/mode diagnostics, explicit resolution and refresh-rate selection, software gamma dimming/color temperature, and experimental HiDPI override/text-size controls.
+## What changed in 0.5.0
 
-## Requirements and scope
+- Automatic mode defaults on and resumes at every application start, including after login. Obsolete confirmation profiles and permanent pause settings are cleared.
+- No OS/driver fingerprint or previous physical confirmation is required for automatic operation.
+- Startup waits 8 seconds; connected display configuration must remain stable for 4 seconds.
+- Temporary failures are retried after a 60-second cooldown instead of permanently turning automation off.
+- The user LaunchAgent uses `RunAtLoad` and `KeepAlive=true`, with a 10-second restart throttle. The menu's former quit action now restarts the app through launchd.
+- A new app/menu icon and refreshed light/dark interface are included. The overview shows the current resolution, refresh rate and automation status.
+- Live display checks and the independent external-loss recovery process continue in the background. The normal automatic path shows no manual confirmation countdown.
 
-- macOS 13 or later is the build target; **only macOS 26.7.1 on Intel has been tested**.
-- Swift Command Line Tools or Xcode. The current snapshot was built with Swift 6.3 in Swift 5 language mode.
-- A working built-in display and a real, active external display are required for disable testing.
-- No external Swift package dependencies, kernel extensions or NVIDIA driver files are bundled.
-- The UI and CLI messages are currently primarily Chinese. Apple Silicon, native Macs, docks, multiple external displays, sleep/wake and other GPUs are unverified.
-- This is an independent project, not an official component of BetterDisplay, Apple, NVIDIA or NullMoth.
+## Build and install
 
-## Build
+Requirements: macOS 13+ build target, Swift Command Line Tools or Xcode, and an awake graphical session for the fixture checks. No external Swift packages are required. The current binary is **Intel x86_64**, ad-hoc signed, and not notarized.
 
 ```bash
 git clone https://github.com/sherves/MacDisplaySwitch.git
@@ -39,68 +33,64 @@ bash scripts/check.sh
 bash scripts/build.sh
 ```
 
-Outputs: `build/DisplayFocus.app` and `.build/release/displayfocus`. Keep the full app bundle: `Contents/MacOS/DisplayFocusRecovery` is required for protected disabling. The build script ad-hoc signs the app; it is not Developer ID signed or notarized. Do not disable macOS security protections to run it.
+Outputs are `build/DisplayFocus.app` and `.build/release/displayfocus`. Keep the complete app bundle: `Contents/MacOS/DisplayFocusRecovery` is required. Preserve any older installation before replacing it. Put the full application at `/Applications/DisplayFocus.app` and open it normally.
 
-If SwiftPM is unavailable, `bash scripts/build-swiftc.sh` builds with `swiftc` and packages the app. Builds use the host architecture, not a universal binary. The fixture checks need an awake graphical session and are not `swift test`/XCTest tests.
+**Opening the app enables automatic external-only operation and maintains its login item.** Configure an extended desktop and connect the external first. The app appears in the menu bar. The overview's **立即仅外屏** action requests an immediate switch without an extra confirmation. **临时恢复内屏** restores the panel and pauses automatic closing until the next app start/login.
 
-For login startup, put the complete app in `/Applications/DisplayFocus.app` first. If an older installation exists, quit the app and preserve that installation before replacing it. Launch the app normally; it appears only in the menu bar, not the Dock.
+Automation runs after user login, not during firmware boot, disk unlock or the login screen. The app cannot make a driver recognize an otherwise missing external display.
 
-## First use
-
-1. Keep an independent recovery/control path available and observe the physical displays locally.
-2. Connect the external screen and configure extended desktop using the system's normal display controls. Run `.build/release/displayfocus diagnose` to inspect the current state.
-3. In the menu app choose **测试关闭内屏**. Verify that the external image keeps updating and input works. If it does not, do not confirm; the helper starts recovery at the deadline. Recovery completion is not guaranteed within 25 seconds.
-4. Choose **外屏正常，保留** before the deadline. Only after this physical check enable **自动仅外屏**. Enable **登录时启动** separately if wanted.
-5. Test unplug/reconnect with the actual hardware before unattended use. A different display/mode or changed OS/driver fingerprint needs fresh confirmation.
-
-Auto mode applies **after user login**, not in OpenCore, FileVault unlock or the pre-login screen. It cannot make an unrecognized HDMI connection appear in the driver.
-
-## CLI and recovery
+If SwiftPM is unavailable, use `bash scripts/build-swiftc.sh`. Builds use the host architecture. To regenerate icons:
 
 ```bash
-.build/release/displayfocus diagnose       # Read-only actual display state
+swift scripts/make-icons.swift Resources
+iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns
+```
+
+## CLI
+
+```bash
+.build/release/displayfocus diagnose       # Read-only display state
 .build/release/displayfocus status
-.build/release/displayfocus disable-builtin
-.build/release/displayfocus confirm-disable
-.build/release/displayfocus revert-disable
 .build/release/displayfocus auto on
-.build/release/displayfocus auto off
-.build/release/displayfocus enable-builtin # Also turns auto off
+.build/release/displayfocus auto off       # Pause until next app start/login
+.build/release/displayfocus enable-builtin # Pause and restore the panel
 .build/release/displayfocus login on
 .build/release/displayfocus login off
 ```
 
-For an installed app, the same CLI is available at:
+The installed CLI is `/Applications/DisplayFocus.app/Contents/MacOS/DisplayFocusRecovery`. `auto off` alone does not restore a disabled panel. To stop the utility completely, unregister the login agent first, then restore the panel:
 
 ```bash
-"/Applications/DisplayFocus.app/Contents/MacOS/DisplayFocusRecovery" auto off
+"/Applications/DisplayFocus.app/Contents/MacOS/DisplayFocusRecovery" login off
 "/Applications/DisplayFocus.app/Contents/MacOS/DisplayFocusRecovery" enable-builtin
 ```
 
-`auto off` alone does not restore a currently disabled panel. `enable-builtin` disables auto mode and attempts panel restoration. A normal quit leaves the independent recovery monitor running while a confirmed panel disable is managed. See [DESIGN.md](DESIGN.md) for failure handling and [TESTING.md](TESTING.md) for recovery limitations.
+Opening the app again resumes automation and recreates its login configuration. Legacy `disable-builtin` / `confirm-disable` / `revert-disable` CLI commands remain available for optional manual diagnostics; they are not prerequisites for automatic operation.
 
-Run the CLI without arguments to see mode, scaling, gamma and HiDPI commands. Optional HiDPI override writes/removes a vendor/product file under `/Library/Displays/Contents/Resources/Overrides` and asks for administrator authentication; it may replace an existing file at that exact location, so preserve any existing override first. Text-size controls write user accessibility preferences. These are separate from hot-plug automation and have limited hardware validation.
+Run the CLI without arguments for resolution, refresh-rate, gamma, HiDPI override and text-size commands. HiDPI overrides require administrator authentication and may replace a file at the selected vendor/product path. Software gamma is not hardware brightness.
+
+## Validation and scope
+
+Version 0.5.0 passed a release build, strict signature verification, 19 automation checks, and independent recovery-process fixtures. In the running login session, a real LaunchAgent start automatically disabled the panel without manual confirmation; the external remained 2560×1440@144Hz beyond the old confirmation deadline. Terminating the GUI caused launchd to restart it, with the panel still disabled and monitoring alive.
+
+The project has been exercised on one Intel/OpenCore RTX 3060 laptop with macOS 26.7.1. **A full reboot, a fresh driver upgrade, repeated physical hot-plug, sleep/wake, Apple Silicon and native Mac compatibility have not been qualified for 0.5.0.** Readback does not prove physical usability. Private SkyLight APIs and driver behavior can change; a hung driver or WindowServer can prevent recovery. Logical disable does not guarantee backlight power-off.
+
+See [DESIGN.md](DESIGN.md), [TESTING.md](TESTING.md), [CHANGELOG.md](CHANGELOG.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Data and privacy
 
-No telemetry or built-in log upload. Display profiles, vendor/model/serial-derived keys, recovery tickets and optional login settings stay on the local Mac:
-
-- Preferences: `com.holmes.displayfocus`
-- Recovery: `~/Library/Application Support/DisplayFocus/Recovery/`
-- Login agent: `~/Library/LaunchAgents/com.holmes.displayfocus.plist`
-
-Diagnostic output can contain display identities. Review it before sharing. This public repository excludes the development machine's real profiles, raw logs, EFI, backups, account data and handoff records.
+No telemetry or built-in upload. Preferences (`com.holmes.displayfocus`), recovery tickets (`~/Library/Application Support/DisplayFocus/Recovery/`) and the user login agent stay on the Mac. Diagnostics may contain display identities: redact them before sharing. This repository and release source package exclude real profiles, recovery tickets, raw logs, EFI, driver files, local backups and private handoff notes.
 
 ## 中文说明
 
-MacDisplaySwitch（Mac 屏幕切换）是独立开发的 macOS 菜单栏工具。现有应用包、命令行和偏好域沿用 DisplayFocus 名称，避免影响已安装用户的设置。核心用途是：**接上已确认的外屏后自动逻辑停用内屏，拔掉外屏时尝试恢复内屏**，不自动降低刷新率，不用镜像替代关闭。
+**0.5.0 默认持续自动仅外屏**：登录后运行，外屏连接稳定后自动关闭内屏。更新驱动不再要求点测试或确认；拔掉外屏恢复内屏，接回后自动关闭。启动等待 8 秒，连接稳定等待 4 秒；临时失败后等待 60 秒再自动重试。
 
-首次必须看着实体外屏做一次 25 秒保护测试并确认，之后才开启自动模式；登录时启动需要单独开启。登录后先等待 8 秒，显示配置连续稳定 4 秒后才执行。不同屏幕、模式或系统/驱动环境需要重新确认。内屏恢复按保存的 UUID 重新枚举当前 ID，最多等待 20 秒；失败暂停自动操作，不循环强行重试。
+把完整 `DisplayFocus.app` 放到“应用程序”后打开。程序会开启自动模式并维护登录启动项，退出后由系统自动重新运行。“立即仅外屏”直接切换；“临时恢复内屏”只暂停本次自动关闭，下次启动或登录恢复自动。
 
-目前仅在一台 RTX 3060 Laptop / macOS 26.7.1 / NVIDIA 2.6.3 机器上验证部分路径，外屏 2560×1440@144Hz 保持。曾出现第一次拔线恢复失败，修正后用户确认内屏恢复；最终版本的跨重启、反复插拔和长期稳定性仍待完整验证。**它不是驱动补丁，也不保证其他机器能用或背光彻底断电。**
+应用图标与四页界面已更新。当前下载包是 Intel x86_64 版本。恢复目标按内屏 UUID 重新枚举，外屏模式和刷新率保持；逻辑关闭仍不保证背光断电。本次已验证登录项启动后无需人工确认自动关闭、保持外屏 144Hz，以及主程序退出后自动重新运行；真正重启、升级驱动后的实机流程及长期稳定性仍待验收。
 
-构建使用上面的 `bash scripts/check.sh` 和 `bash scripts/build.sh`。恢复时使用 `enable-builtin`，它会同时关闭自动模式。不要依赖本工具恢复内核或 WindowServer 卡死；详细边界见 [TESTING.md](TESTING.md)。
+如需完全停用，在终端依次运行上方的 `login off` 与 `enable-builtin`。再次打开应用会恢复自动模式及登录项。
 
-## License and development
+## License
 
-[MIT](LICENSE). Developed with AI assistance and owner-operated physical testing; this repository does not claim independent human authorship for generated code. No commercial-app binaries or source are distributed here. See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting and validation expectations.
+[MIT](LICENSE). Developed with AI assistance and owner-operated testing. This is an independent project, not an official component of Apple, NVIDIA, NullMoth or a commercial display utility. No proprietary app code or graphics-driver binaries are distributed.

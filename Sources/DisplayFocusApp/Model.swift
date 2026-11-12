@@ -25,8 +25,10 @@ final class Model: ObservableObject {
     private var recoveryTimer: Timer?
     private var tokens: [NSObjectProtocol] = []
 
-    init() {
+    init(observing: Bool = true) {
         refresh()
+        // Read-only rendering for UI review; no timers, automation or gamma changes.
+        guard observing else { return }
         recoveryTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -57,6 +59,8 @@ final class Model: ObservableObject {
                 }
             })
         }
+        do { try LoginAgent.ensureEnabled() }
+        catch { message = "登录启动设置失败：\(error)" }
         AutoController.shared.start()
         SoftwareLight.reapplyAll()
     }
@@ -65,9 +69,10 @@ final class Model: ObservableObject {
         builtinState = DisplayManager.builtinState
         autoOn = AutoController.shared.enabled
         loginOn = LoginAgent.isInstalled
+        let previousAuto = lastAuto
         lastAuto = AutoController.shared.lastMessage
         textSizeGlobal = TextSize.currentGlobal()
-        if !lastAuto.isEmpty && message.isEmpty { message = lastAuto }
+        if message.isEmpty || message == previousAuto { message = lastAuto }
         if selected == nil || !displays.contains(where: { $0.id == selected }) {
             selected = displays.first(where: { !$0.isBuiltin })?.id ?? displays.first?.id
         }
@@ -150,7 +155,7 @@ final class Model: ObservableObject {
         guard let id = selected else { return }
         act("已切换到 \(mode.label)") { try DisplayManager.setMode(display: id, modeID: mode.id) }
     }
-    func setAuto(_ on: Bool) { AutoController.shared.enabled = on; autoOn = on; message = on ? "已开启登录/接屏自动模式；\(AutomaticDisplayPolicy.status)" : "自动模式已关闭" }
+    func setAuto(_ on: Bool) { AutoController.shared.enabled = on; autoOn = on; message = on ? "已开启登录/接屏自动模式；\(AutomaticDisplayPolicy.status)" : "本次临时恢复内屏；下次启动自动开启" }
     func setLogin(_ on: Bool) {
         do {
             if on {
@@ -182,15 +187,16 @@ final class Model: ObservableObject {
         light = SoftwareLight.reset(id)
         message = "已恢复软件调整"
     }
-    var canTestDisable: Bool {
-        !trialPending && DisplayManager.privateDisableAvailable && DisplaySafety.records().contains { !$0.builtin && $0.usable && $0.mirror == 0 }
+    var canUseExternalOnly: Bool {
+        !trialPending && DisplayManager.privateDisableAvailable && DisplayTrial.automaticAllowed
     }
-    func testDisable() {
+    func useExternalOnly() {
+        AutoController.shared.enabled = true
         do {
-            try DisplayManager.disableBuiltin()
-            trialPending = true; trialSeconds = DisplayTrial.secondsLeft
-            message = "请确认外屏显示和鼠标操作正常；25 秒未确认将尝试恢复"
-        } catch { message = "关闭测试失败：\(error)" }
+            _ = try DisplayTrial.begin(automatic: true)
+            try DisplayTrial.confirmAutomatically()
+            message = "已切换为仅外屏，自动模式持续开启"
+        } catch { message = "等待显示器就绪后自动切换：\(error)" }
         refresh()
     }
     func confirmDisable() {
@@ -202,7 +208,7 @@ final class Model: ObservableObject {
         AutoController.shared.enabled = false // manual recovery must not immediately close it again
         do {
             try DisplayManager.restoreBuiltin()
-            message = "内屏已逻辑启用，请确认实体画面可操作"
+            message = "内屏已临时恢复；重新启动应用或登录后自动仅外屏"
         } catch { message = "恢复失败：\(error)" }
         trialPending = DisplayTrial.isPending; refresh()
     }

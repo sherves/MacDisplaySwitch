@@ -4,10 +4,19 @@ import CoreGraphics
 /// App 与 CLI 共享的偏好设置域
 public enum Store {
     public static let suite = "com.holmes.displayfocus"
-    nonisolated(unsafe) public static let defaults: UserDefaults = Bundle.main.bundleIdentifier == suite ? .standard : (UserDefaults(suiteName: suite) ?? .standard)
+    #if DISPLAYFOCUS_FIXTURES
+    static var defaultsOverride: UserDefaults?
+    #endif
+    public static var defaults: UserDefaults {
+        #if DISPLAYFOCUS_FIXTURES
+        if let override = defaultsOverride { return override }
+        #endif
+        return sharedDefaults
+    }
+    nonisolated(unsafe) private static let sharedDefaults: UserDefaults = Bundle.main.bundleIdentifier == suite ? .standard : (UserDefaults(suiteName: suite) ?? .standard)
 
     public static var autoEnabled: Bool {
-        get { defaults.bool(forKey: "DisplayFocus.autoMode") }
+        get { (defaults.object(forKey: "DisplayFocus.autoMode") as? Bool) ?? true }
         set { defaults.set(newValue, forKey: "DisplayFocus.autoMode") }
     }
 }
